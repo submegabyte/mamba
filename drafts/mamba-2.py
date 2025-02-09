@@ -3,9 +3,6 @@ import torch
 from torch import cfloat
 import torch.nn as nn
 
-from hippo import *
-from s4d_kernel import *
-
 ## rank = 1
 def hippo_LegS(n, k):
     if n > k:
@@ -42,6 +39,8 @@ def hippo_LegS_D_matrix(N):
 
     AD = eigenvalues ## N
     # AD = torch.diag(eigenvalues) ## N x N
+
+    # print(AD.shape)
     return AD
 
 ## A is an N x N diagonal matrix
@@ -89,9 +88,11 @@ class Discretize1D:
     def ZOH(delta, A, B):
         ## delta: L x F or B x L x F
         ## A: F x N
-        ## B: L x F or Batch x L x F
-        N = A.shape[0]
+        ## B: L x N or Batch x L x N
+        F, N = A.shape[-2:]
         # I = torch.eye(N)
+
+        # print(delta.shape, A.shape, B.shape)
 
         ## diagonal matrix
         dA = delta @ A ## L x F x N or Batch x L x F x N
@@ -102,11 +103,19 @@ class Discretize1D:
 
         deltaS = delta.select(-1, 0) ## L or Batch x L
         deltaS = deltaS.unsqueeze(-1) ## L x 1 or Batch x L x 1
-        dB = deltaS * B ## L x F or Batch x L x F
+        dB = deltaS * B ## L x N or Batch x L x N
+        dBF = dB.unsqueeze(-2) ## L x 1 x N or Batch x L x 1 x N
+        dBF = dBF.expand(*dBF.shape[:-2], F, *dBF.shape[-1:]) ## L x F x N or Batch x L x F x N
+        # print(deltaS.shape, B.shape, dB.shape)
+
+        print(A.shape, dA.shape, idA.shape)
+        print(B.shape, deltaS.shape, dB.shape)
 
         Ad = torch.exp(dA) ## L x F x N or Batch x L x F x N
         # Bd = idA @ (dA - I) @ dB 
-        Bd = idA * (dA - 1) * dB ## L x F x N or Batch x L x F x N
+        Bd = (idA * (dA - 1)) * dB ## L x F x N or Batch x L x F x N
+
+        print(Ad.shape, Bd.shape)
 
         return Ad, Bd
 
@@ -148,8 +157,9 @@ class S6(nn.Module):
         ## parameters
         self.A = hippo_LegS_D_matrix(N) ## N x
         self.A = self.A.unsqueeze(0) ## 1 x N
-        self.A = self.A.repeat(F, N) ## F x N
-        self.A = nn.Parameter(self.A).to(cfloat) ## N x N
+        self.A = self.A.repeat(F, 1) ## F x N
+        # print(self.A.shape)
+        self.A = nn.Parameter(self.A).to(cfloat) ## F x N
         self.sB = nn.Linear(F, N)
         self.sC = nn.Linear(F, N)
         self.sDeltaP = nn.Linear(F, 1)
@@ -164,7 +174,7 @@ class S6(nn.Module):
         ## scalars
         self.N = N ## state size
         self.F = F ## feature embedding length
-        self.Delta = delta ## step size
+        self.delta = delta ## step size
         
     ## x: B x L x D
     def forward(self, x):
@@ -185,9 +195,9 @@ class S6(nn.Module):
         C = C.view(*x.shape[:-1], self.N) ## L x F or Batch x L x F
 
         delta = self.tDelta(self.delta + self.sDelta(xv)) ## L x F or BL x F
-        delta = delta.view(*x.shape[:-1], 1) ## L x F or Batch x L x F
+        delta = delta.view(*x.shape[:-1], 1).to(cfloat) ## L x F or Batch x L x F
 
-        Ad, Bd = Discretize1D.ZOH(self.delta, self.A, self.B) ## L x F x N or Batch x L x F x N
+        Ad, Bd = Discretize1D.ZOH(delta, self.A, B) ## L x F x N or Batch x L x F x N
         # Kd = s4d_kernel(Ad, Bd, self.C, L)
 
         # print(Kd.shape, x.shape)
@@ -214,7 +224,7 @@ class S6(nn.Module):
 
 
 if __name__ == "__main__":
-    L = 20020
+    L = 200
     F = 1 ## embedding
     N = 64 ## state
 

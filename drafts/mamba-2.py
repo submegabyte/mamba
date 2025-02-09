@@ -95,7 +95,7 @@ class Discretize1D:
         # print(delta.shape, A.shape, B.shape)
 
         ## diagonal matrix
-        dA = delta @ A ## L x F x N or Batch x L x F x N
+        dA = delta.unsqueeze(-1) * A.unsqueeze(-3) ## L x F x N or Batch x L x F x N
         # idA = torch.inverse(dA)
         
         ## diagonal matrix inverse
@@ -108,12 +108,12 @@ class Discretize1D:
         dBF = dBF.expand(*dBF.shape[:-2], F, *dBF.shape[-1:]) ## L x F x N or Batch x L x F x N
         # print(deltaS.shape, B.shape, dB.shape)
 
-        print(A.shape, dA.shape, idA.shape)
-        print(B.shape, deltaS.shape, dB.shape)
+        print(delta.shape, A.shape, dA.shape, idA.shape)
+        print(B.shape, deltaS.shape, dB.shape, dBF.shape)
 
         Ad = torch.exp(dA) ## L x F x N or Batch x L x F x N
         # Bd = idA @ (dA - I) @ dB 
-        Bd = (idA * (dA - 1)) * dB ## L x F x N or Batch x L x F x N
+        Bd = (idA * (dA - 1)) * dBF ## L x F x N or Batch x L x F x N
 
         print(Ad.shape, Bd.shape)
 
@@ -195,7 +195,7 @@ class S6(nn.Module):
         C = C.view(*x.shape[:-1], self.N) ## L x F or Batch x L x F
 
         delta = self.tDelta(self.delta + self.sDelta(xv)) ## L x F or BL x F
-        delta = delta.view(*x.shape[:-1], 1).to(cfloat) ## L x F or Batch x L x F
+        delta = delta.view(*x.shape[:-1], F).to(cfloat) ## L x F or Batch x L x F
 
         Ad, Bd = Discretize1D.ZOH(delta, self.A, B) ## L x F x N or Batch x L x F x N
         # Kd = s4d_kernel(Ad, Bd, self.C, L)
@@ -225,7 +225,7 @@ class S6(nn.Module):
 
 if __name__ == "__main__":
     L = 200
-    F = 1 ## embedding
+    F = 4 ## embedding
     N = 64 ## state
 
     x = torch.randn(L, F) ## L x 1

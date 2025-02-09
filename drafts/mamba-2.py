@@ -213,7 +213,9 @@ class S6(nn.Module):
             Adi = Ad.select(-2, i) ## F x N or Batch x F x N
             Bdi = Bd.select(-2, i) ## F x N or Batch x F x N
 
-            h = self.Adi * h + self.Bd * xi ## F x N or Batch x F x N
+            print(Adi.shape, Bdi.shape)
+
+            h = Adi * h + self.Bd * xi ## F x N or Batch x F x N
         
         Cl = C.select(-2, -1) ## F x N or Batch x F x N
 

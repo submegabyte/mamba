@@ -40,6 +40,7 @@ def hippo_LegS_D_matrix(N):
     AD = eigenvalues ## N
     # AD = torch.diag(eigenvalues) ## N x N
 
+    # print(AD)
     # print(AD.shape)
     return AD
 
@@ -108,14 +109,14 @@ class Discretize1D:
         dBF = dBF.expand(*dBF.shape[:-2], F, *dBF.shape[-1:]) ## L x F x N or Batch x L x F x N
         # print(deltaS.shape, B.shape, dB.shape)
 
-        print(delta.shape, A.shape, dA.shape, idA.shape)
-        print(B.shape, deltaS.shape, dB.shape, dBF.shape)
+        # print(delta.shape, A.shape, dA.shape, idA.shape)
+        # print(B.shape, deltaS.shape, dB.shape, dBF.shape)
 
         Ad = torch.exp(dA) ## L x F x N or Batch x L x F x N
         # Bd = idA @ (dA - I) @ dB 
         Bd = (idA * (dA - 1)) * dBF ## L x F x N or Batch x L x F x N
 
-        print(Ad.shape, Bd.shape)
+        # print(Ad.shape, Bd.shape)
 
         return Ad, Bd
 
@@ -156,10 +157,12 @@ class S6(nn.Module):
 
         ## parameters
         self.A = hippo_LegS_D_matrix(N) ## N x
+        # print(self.A.dtype)
         self.A = self.A.unsqueeze(0) ## 1 x N
         self.A = self.A.repeat(F, 1) ## F x N
         # print(self.A.shape)
-        self.A = nn.Parameter(self.A).to(cfloat) ## F x N
+        self.A = nn.Parameter(self.A)
+        # self.A = self.A.to(cfloat) ## F x N
         self.sB = nn.Linear(F, N)
         self.sC = nn.Linear(F, N)
         self.sDeltaP = nn.Linear(F, 1)
@@ -189,13 +192,15 @@ class S6(nn.Module):
         ## https://chatgpt.com/share/67a7cbfb-3130-800c-985d-ae2ffc1483d9
 
         B = self.sB(xv) ## L x N or BL x N
-        B = B.view(*x.shape[:-1], self.N) ## L x F or Batch x L x F
+        B = B.view(*x.shape[:-1], self.N) ## L x N or Batch x L x N
 
         C = self.sC(xv) ## L x N or BL x N
-        C = C.view(*x.shape[:-1], self.N) ## L x F or Batch x L x F
+        C = C.to(cfloat)
+        C = C.view(*x.shape[:-1], self.N) ## L x N or Batch x L x N
 
         delta = self.tDelta(self.delta + self.sDelta(xv)) ## L x F or BL x F
-        delta = delta.view(*x.shape[:-1], F).to(cfloat) ## L x F or Batch x L x F
+        delta = delta.view(*x.shape[:-1], F)
+        delta = delta.to(cfloat) ## L x F or Batch x L x F
 
         Ad, Bd = Discretize1D.ZOH(delta, self.A, B) ## L x F x N or Batch x L x F x N
         # Kd = s4d_kernel(Ad, Bd, self.C, L)
@@ -210,17 +215,28 @@ class S6(nn.Module):
             ## https://chatgpt.com/share/67a7cbfb-3130-800c-985d-ae2ffc1483d9
             xi = x.select(-2, i) ## F or Batch x F
 
-            Adi = Ad.select(-2, i) ## F x N or Batch x F x N
-            Bdi = Bd.select(-2, i) ## F x N or Batch x F x N
+            Adi = Ad.select(-3, i) ## F x N or Batch x F x N
+            Bdi = Bd.select(-3, i) ## F x N or Batch x F x N
 
-            print(Adi.shape, Bdi.shape)
+            # print(Ad.shape, Bd.shape)
+            # print(Adi.shape, Bdi.shape)
+            # print(h.shape, xi.shape)
 
-            h = Adi * h + self.Bd * xi ## F x N or Batch x F x N
+            h = Adi * h + Bdi * xi.unsqueeze(-1) ## F x N or Batch x F x N
         
-        Cl = C.select(-2, -1) ## F x N or Batch x F x N
+        Cl = C.select(-2, -1) ## N or Batch x N
+        Clu = Cl.unsqueeze(-2) ## 1 x N or Batch x 1 x N
+        Cle = Clu.expand(*Clu.shape[:-2], F, *Clu.shape[-1:]) ## F x N or Batch x F x N
+
+        # print(Cle.shape, h.shape)
+        # print(Cle.dtype, h.dtype)
+
+        # print(h)
 
         ## https://chatgpt.com/share/67a7e6ce-71c8-800c-af23-747f5fdc7651
-        y = torch.einsum('...i,...i->...', Cl, h)   ## F or Batch x F
+        y = torch.einsum('...i,...i->...', Cle, h)   ## F or Batch x F
+
+        # print(y)
 
         return y
 
@@ -235,4 +251,4 @@ if __name__ == "__main__":
 
     y = model(x)
 
-    print(y.shape) ## 1 x 1
+    print(y.shape) ## F or Batch x F

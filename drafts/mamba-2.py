@@ -245,8 +245,9 @@ if __name__ == "__main__":
     L = 200
     F = 4 ## embedding
     N = 64 ## state
+    Batch = 100
 
-    x = torch.randn(L, F) ## L x 1
+    x = torch.randn(Batch, L, F) ## L x 1
     model = S6(N, F) ## L x 1
 
     y = model(x)

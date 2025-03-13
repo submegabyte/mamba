@@ -1,2 +1,4 @@
 Move delta, A, B, C from HBM to SRAM
 https://stackoverflow.com/questions/68640483/why-is-the-triton-language-faster-than-pytorch
+
+https://alexdremov.me/understanding-flash-attention-writing-the-algorithm-from-scratch-in-triton/
